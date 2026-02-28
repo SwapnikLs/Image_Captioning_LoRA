@@ -1,0 +1,37 @@
+seed: 42
+base_model: /home/swapnik/.cache/huggingface/hub/models--nlpconnect--vit-gpt2-image-captioning/snapshots/dc68f91c06a1ba6f15268e5b9c13ae7a7c514084
+local_files_only: true
+images_dir: /home/swapnik/MyStuff/ImageCaptioning/CapData/flickr30k_images
+train_csv: /home/swapnik/MyStuff/ImageCaptioning/CapData/Captioning_LoRA_4GB/data/processed/train.csv
+val_csv: /home/swapnik/MyStuff/ImageCaptioning/CapData/Captioning_LoRA_4GB/data/processed/val.csv
+output_dir: /home/swapnik/MyStuff/ImageCaptioning/CapData/Captioning_LoRA_4GB/outputs/vitgpt2_lora
+
+# RTX 3050 4GB safe defaults
+max_target_length: 32
+train_batch_size: 1
+eval_batch_size: 1
+gradient_accumulation_steps: 4
+learning_rate: 0.0002
+weight_decay: 0.01
+num_train_epochs: 1
+warmup_ratio: 0.05
+num_workers: 0
+fp16: true
+gradient_checkpointing: true
+
+# LoRA on decoder attention
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.1
+lora_target_modules:
+  - c_attn
+  - c_proj
+
+# Detailed caption style
+instruction_prefix: "Detailed caption: "
+
+# Generation defaults for eval/inference
+num_beams: 3
+length_penalty: 1.1
+min_new_tokens: 12
+max_new_tokens: 40
