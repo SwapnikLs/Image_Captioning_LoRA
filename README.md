@@ -92,11 +92,3 @@ This reports:
 - SacreBLEU
 - ROUGE-L
 
-## Notes
-
-- Your previous captions were heavily normalized; this pipeline keeps more detail via instruction prefixing and decoding controls.
-- If you hit OOM:
-  - reduce `gradient_accumulation_steps` only if training is too slow
-  - keep batch size `1`
-  - lower `max_target_length` from `48` to `40`
-- For even richer captions later, swap base model to BLIP and keep the same LoRA training pattern.
