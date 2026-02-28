@@ -10,3 +10,4 @@ tqdm>=4.66.0
 evaluate>=0.4.1
 rouge-score>=0.1.2
 sacrebleu>=2.4.0
+Flask>=3.0.0

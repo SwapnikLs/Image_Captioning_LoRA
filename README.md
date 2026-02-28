@@ -92,3 +92,37 @@ This reports:
 - SacreBLEU
 - ROUGE-L
 
+<<<<<<< HEAD
+=======
+## 6) Web app (upload image -> caption)
+
+Start the web server:
+
+```bash
+bash scripts/run_web.sh
+```
+
+Open in browser:
+
+```text
+http://127.0.0.1:7860
+```
+
+What it does:
+- user uploads image (`png/jpg/jpeg/webp`)
+- app runs your trained caption model
+- caption is shown on the web page
+
+Folder split:
+- `backend/app.py` -> Flask backend + model inference
+- `frontend/templates/index.html` -> web page UI
+
+## Notes
+
+- Your previous captions were heavily normalized; this pipeline keeps more detail via instruction prefixing and decoding controls.
+- If you hit OOM:
+  - reduce `gradient_accumulation_steps` only if training is too slow
+  - keep batch size `1`
+  - lower `max_target_length` from `48` to `40`
+- For even richer captions later, swap base model to BLIP and keep the same LoRA training pattern.
+>>>>>>> 32babfc (Add web app with separated frontend/backend and improved UI)

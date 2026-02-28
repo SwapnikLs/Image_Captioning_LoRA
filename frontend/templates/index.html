@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Image Caption Generator</title>
+  <style>
+    :root {
+      --bg: #f8f9fb;
+      --ink: #1f2937;
+      --muted: #596579;
+      --card: #ffffff;
+      --line: #d8deea;
+      --accent: #0e7490;
+      --accent-2: #f59e0b;
+      --danger: #c2410c;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+      background:
+        radial-gradient(circle at 15% 10%, #d9f2ff 0%, transparent 35%),
+        radial-gradient(circle at 85% 0%, #fff4d2 0%, transparent 40%),
+        var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    .wrap {
+      max-width: 940px;
+      margin: 28px auto;
+      padding: 0 16px;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 16px 45px rgba(28, 42, 66, 0.12);
+    }
+    .hero {
+      padding: 26px 26px 18px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(125deg, #edf8ff 0%, #fff8e9 100%);
+    }
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #0b5568;
+      background: rgba(14, 116, 144, 0.12);
+      border: 1px solid rgba(14, 116, 144, 0.25);
+      border-radius: 999px;
+      padding: 6px 10px;
+      margin-bottom: 12px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1.1;
+    }
+    .sub {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 780px;
+    }
+    .content {
+      padding: 22px 26px 26px;
+    }
+    .upload-box {
+      border: 2px dashed #9ac4d1;
+      border-radius: 14px;
+      padding: 14px;
+      background: #f9fdff;
+      margin-bottom: 12px;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    input[type="file"] {
+      border: 1px solid #b8d8e1;
+      border-radius: 12px;
+      padding: 10px;
+      background: #fff;
+      width: 100%;
+      color: #334155;
+    }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 18px;
+      background: linear-gradient(140deg, #0e7490 0%, #155e75 100%);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(14, 116, 144, 0.25);
+      transition: transform .15s ease, filter .15s ease;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(0.97);
+    }
+    .error {
+      margin-top: 10px;
+      color: var(--danger);
+      font-weight: 700;
+      background: #fff4ed;
+      border: 1px solid #fed7aa;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .result {
+      margin-top: 18px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .result h3 {
+      margin: 4px 0 10px;
+    }
+    .caption {
+      font-size: 18px;
+      line-height: 1.5;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .preview {
+      margin-top: 12px;
+      max-width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      display: block;
+    }
+    .tip {
+      margin-top: 12px;
+      color: #64748b;
+      font-size: 13px;
+    }
+    @media (max-width: 640px) {
+      h1 { font-size: 28px; }
+      .hero, .content { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="hero">
+        <div class="badge">LoRA Captioning Demo</div>
+        <h1>Image Caption Generator</h1>
+        <p class="sub">Upload a photo and generate a concise caption using your trained model.</p>
+      </div>
+
+      <div class="content">
+        <form method="post" enctype="multipart/form-data">
+          <div class="upload-box">
+            <div class="row">
+              <input type="file" name="image" accept=".png,.jpg,.jpeg,.webp" required />
+            </div>
+            <button type="submit">Generate Caption</button>
+          </div>
+        </form>
+
+        {% if error %}
+          <div class="error">{{ error }}</div>
+        {% endif %}
+
+        {% if caption %}
+          <div class="result">
+            <h3>Generated Caption</h3>
+            <div class="caption">{{ caption }}</div>
+            {% if image_path %}
+              <img src="{{ image_path }}" alt="Uploaded image" class="preview" />
+            {% endif %}
+          </div>
+        {% endif %}
+
+        <div class="tip">Supported formats: PNG, JPG, JPEG, WEBP.</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
