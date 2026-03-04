@@ -46,7 +46,7 @@ def clean_caption(text: str, prefix: str = "", max_words: int = 26) -> str:
     while words and words[-1].lower().strip(".,") in dangling:
         words.pop()
 
-    # Remove trailing incomplete tails like "while one" or "while a".
+   
     tail2 = " ".join(w.lower().strip(".,") for w in words[-2:]) if len(words) >= 2 else ""
     if tail2 in {"while one", "while a", "while an", "while the"}:
         words = words[:-2]
@@ -55,11 +55,11 @@ def clean_caption(text: str, prefix: str = "", max_words: int = 26) -> str:
         return text.strip()
 
     cleaned = " ".join(words).strip(" ,.")
-    # Fix common tokenization glitch: "ian" at sentence start.
+   
     cleaned = re.sub(r"^ian\s+", "an ", cleaned, flags=re.IGNORECASE)
-    # Fix invalid starts like "an people"/"a people".
+  
     cleaned = re.sub(r"^(?:an|a)\s+people\b", "people", cleaned, flags=re.IGNORECASE)
-    # Normalize punctuation spacing.
+   
     cleaned = re.sub(r"\s+([.,!?])", r"\1", cleaned)
 
     cleaned = cleaned[:1].upper() + cleaned[1:]
@@ -101,7 +101,7 @@ def main():
     image_processor = AutoImageProcessor.from_pretrained(model_source, local_files_only=True)
     model = VisionEncoderDecoderModel.from_pretrained(model_source, local_files_only=True)
 
-    # Load LoRA adapter when available; otherwise run base model captioning.
+    
     if adapter_dir.exists():
         model.decoder = PeftModel.from_pretrained(model.decoder, adapter_dir)
     else:

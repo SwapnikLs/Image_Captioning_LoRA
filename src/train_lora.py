@@ -133,7 +133,7 @@ def main():
     model.config.vocab_size = model.config.decoder.vocab_size
     model.config.use_cache = False
 
-    # Keep the image encoder frozen for memory and stability on 4GB VRAM.
+    
     for param in model.encoder.parameters():
         param.requires_grad = False
 
@@ -208,7 +208,7 @@ def main():
     trainer.train()
     trainer.save_model()
 
-    # Save adapter separately for clean loading later.
+   
     adapter_dir = output_dir / "decoder_lora"
     model.decoder.save_pretrained(adapter_dir)
     tokenizer.save_pretrained(output_dir)
