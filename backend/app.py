@@ -8,7 +8,13 @@ from flask import Flask, render_template, request
 from huggingface_hub import snapshot_download
 from peft import PeftModel
 from PIL import Image
-from transformers import AutoImageProcessor, AutoTokenizer, VisionEncoderDecoderModel
+from transformers import (
+    AutoImageProcessor,
+    AutoTokenizer,
+    BlipForConditionalGeneration,
+    BlipProcessor,
+    VisionEncoderDecoderModel,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -30,6 +36,11 @@ TOKENIZER = None
 IMAGE_PROCESSOR = None
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 INSTRUCTION_PREFIX = ""
+BAD_WORDS_IDS = None
+BLIP_MODEL = None
+BLIP_PROCESSOR = None
+BLIP_MODEL_ID = os.environ.get("BLIP_MODEL_ID", "Salesforce/blip-image-captioning-base")
+DEFAULT_MODE = os.environ.get("CAPTION_MODE", "blip").strip().lower()
 
 
 def load_run_info(output_dir: Path) -> dict:
@@ -49,6 +60,31 @@ def resolve_model_source(model_name_or_path: str) -> str:
         return snapshot_download(repo_id=model_name_or_path, local_files_only=True)
     except Exception:
         return model_name_or_path
+
+
+def load_blip():
+    global BLIP_MODEL, BLIP_PROCESSOR
+    BLIP_PROCESSOR = BlipProcessor.from_pretrained(BLIP_MODEL_ID)
+    BLIP_MODEL = BlipForConditionalGeneration.from_pretrained(BLIP_MODEL_ID)
+    BLIP_MODEL.to(DEVICE)
+    BLIP_MODEL.eval()
+
+
+def build_bad_words_ids(tokenizer):
+    blocked_phrases = [
+        "iced",
+        " iced",
+        "iced latte",
+        "iced tea",
+        "iannis",
+        "iaanis",
+    ]
+    bad_words_ids = []
+    for phrase in blocked_phrases:
+        ids = tokenizer(phrase, add_special_tokens=False).input_ids
+        if ids:
+            bad_words_ids.append(ids)
+    return bad_words_ids
 
 
 def clean_caption(text: str, prefix: str = "", max_words: int = 26) -> str:
@@ -91,6 +127,8 @@ def clean_caption(text: str, prefix: str = "", max_words: int = 26) -> str:
 
     cleaned = " ".join(words).strip(" ,.")
     cleaned = re.sub(r"^ian\s+", "an ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^ike\s+", "a ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^(iannis|iaanis|ianis|iains|ian)\b\s*", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"^(?:an|a)\s+people\b", "people", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+([.,!?])", r"\1", cleaned)
     cleaned = cleaned[:1].upper() + cleaned[1:]
@@ -103,8 +141,8 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def init_model():
-    global MODEL, TOKENIZER, IMAGE_PROCESSOR, INSTRUCTION_PREFIX
+def init_lora_model():
+    global MODEL, TOKENIZER, IMAGE_PROCESSOR, INSTRUCTION_PREFIX, BAD_WORDS_IDS
 
     model_dir_env = os.environ.get("MODEL_DIR", "").strip()
     if model_dir_env:
@@ -128,6 +166,7 @@ def init_model():
     TOKENIZER = AutoTokenizer.from_pretrained(model_dir, local_files_only=True)
     IMAGE_PROCESSOR = AutoImageProcessor.from_pretrained(model_source, local_files_only=True)
     MODEL = VisionEncoderDecoderModel.from_pretrained(model_source, local_files_only=True)
+    BAD_WORDS_IDS = build_bad_words_ids(TOKENIZER)
 
     if adapter_dir.exists():
         MODEL.decoder = PeftModel.from_pretrained(MODEL.decoder, adapter_dir)
@@ -136,7 +175,7 @@ def init_model():
     MODEL.to(DEVICE)
 
 
-def generate_caption(image_path: str) -> str:
+def generate_caption_lora(image_path: str) -> str:
     image = Image.open(image_path).convert("RGB")
     pixel_values = IMAGE_PROCESSOR(images=image, return_tensors="pt").pixel_values.to(DEVICE)
 
@@ -161,10 +200,61 @@ def generate_caption(image_path: str) -> str:
             repetition_penalty=1.35,
             renormalize_logits=True,
             early_stopping=True,
+            bad_words_ids=BAD_WORDS_IDS if BAD_WORDS_IDS else None,
         )
 
     text = TOKENIZER.decode(generated_ids[0], skip_special_tokens=True).strip()
     return clean_caption(text, prefix=INSTRUCTION_PREFIX)
+
+
+def generate_caption_blip(image_path: str) -> str:
+    image = Image.open(image_path).convert("RGB")
+    inputs = BLIP_PROCESSOR(images=image, return_tensors="pt").to(DEVICE)
+    with torch.no_grad():
+        out_ids = BLIP_MODEL.generate(
+            **inputs,
+            num_beams=4,
+            min_new_tokens=8,
+            max_new_tokens=28,
+            length_penalty=1.2,
+            no_repeat_ngram_size=3,
+            repetition_penalty=1.15,
+            early_stopping=True,
+        )
+    text = BLIP_PROCESSOR.decode(out_ids[0], skip_special_tokens=True).strip()
+    return clean_caption(text, prefix="")
+
+
+def init_models():
+    # Deadline-safe behavior:
+    # 1) Try BLIP first (better caption quality)
+    # 2) Always try LoRA too for experimental comparison
+    try:
+        load_blip()
+        print(f"Loaded BLIP model: {BLIP_MODEL_ID}")
+    except Exception as exc:
+        print(f"BLIP load failed, continuing without BLIP: {exc}")
+
+    try:
+        init_lora_model()
+        print("Loaded LoRA caption model.")
+    except Exception as exc:
+        print(f"LoRA load failed, continuing without LoRA: {exc}")
+
+    if BLIP_MODEL is None and MODEL is None:
+        raise RuntimeError("No caption model could be loaded.")
+
+
+def generate_caption(image_path: str, mode: str) -> str:
+    mode = (mode or DEFAULT_MODE).lower()
+    if mode == "lora" and MODEL is not None:
+        return generate_caption_lora(image_path)
+    if mode == "blip" and BLIP_MODEL is not None:
+        return generate_caption_blip(image_path)
+    # graceful fallback
+    if BLIP_MODEL is not None:
+        return generate_caption_blip(image_path)
+    return generate_caption_lora(image_path)
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -172,20 +262,49 @@ def index():
     caption = None
     error = None
     image_rel_path = None
+    selected_mode = DEFAULT_MODE if DEFAULT_MODE in {"blip", "lora"} else "blip"
 
     if request.method == "POST":
+        selected_mode = request.form.get("mode", selected_mode).strip().lower()
+        if selected_mode not in {"blip", "lora"}:
+            selected_mode = "blip"
+
         if "image" not in request.files:
             error = "Please choose an image file."
-            return render_template("index.html", caption=caption, error=error, image_path=image_rel_path)
+            return render_template(
+                "index.html",
+                caption=caption,
+                error=error,
+                image_path=image_rel_path,
+                mode=selected_mode,
+                blip_ready=BLIP_MODEL is not None,
+                lora_ready=MODEL is not None,
+            )
 
         file = request.files["image"]
         if file.filename == "":
             error = "No file selected."
-            return render_template("index.html", caption=caption, error=error, image_path=image_rel_path)
+            return render_template(
+                "index.html",
+                caption=caption,
+                error=error,
+                image_path=image_rel_path,
+                mode=selected_mode,
+                blip_ready=BLIP_MODEL is not None,
+                lora_ready=MODEL is not None,
+            )
 
         if not allowed_file(file.filename):
             error = "Unsupported file type. Use png/jpg/jpeg/webp."
-            return render_template("index.html", caption=caption, error=error, image_path=image_rel_path)
+            return render_template(
+                "index.html",
+                caption=caption,
+                error=error,
+                image_path=image_rel_path,
+                mode=selected_mode,
+                blip_ready=BLIP_MODEL is not None,
+                lora_ready=MODEL is not None,
+            )
 
         ext = file.filename.rsplit(".", 1)[1].lower()
         unique_name = f"{uuid.uuid4().hex}.{ext}"
@@ -193,12 +312,20 @@ def index():
         file.save(save_path)
 
         try:
-            caption = generate_caption(str(save_path))
+            caption = generate_caption(str(save_path), selected_mode)
             image_rel_path = f"/uploads/{unique_name}"
         except Exception as exc:
             error = f"Caption generation failed: {exc}"
 
-    return render_template("index.html", caption=caption, error=error, image_path=image_rel_path)
+    return render_template(
+        "index.html",
+        caption=caption,
+        error=error,
+        image_path=image_rel_path,
+        mode=selected_mode,
+        blip_ready=BLIP_MODEL is not None,
+        lora_ready=MODEL is not None,
+    )
 
 
 @app.route("/uploads/<path:filename>")
@@ -209,5 +336,5 @@ def uploaded_file(filename):
 
 
 if __name__ == "__main__":
-    init_model()
+    init_models()
     app.run(host="0.0.0.0", port=7860, debug=False)

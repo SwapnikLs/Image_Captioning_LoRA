@@ -28,6 +28,23 @@ def resolve_model_source(model_name_or_path: str) -> str:
         return model_name_or_path
 
 
+def build_bad_words_ids(tokenizer):
+    blocked_phrases = [
+        "iced",
+        " iced",
+        "iced latte",
+        "iced tea",
+        "iannis",
+        "iaanis",
+    ]
+    bad_words_ids = []
+    for phrase in blocked_phrases:
+        ids = tokenizer(phrase, add_special_tokens=False).input_ids
+        if ids:
+            bad_words_ids.append(ids)
+    return bad_words_ids
+
+
 def clean_caption(text: str, prefix: str = "", max_words: int = 26) -> str:
     if prefix and text.lower().startswith(prefix.lower()):
         text = text[len(prefix):].strip()
@@ -57,6 +74,8 @@ def clean_caption(text: str, prefix: str = "", max_words: int = 26) -> str:
     cleaned = " ".join(words).strip(" ,.")
    
     cleaned = re.sub(r"^ian\s+", "an ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^ike\s+", "a ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^(iannis|iaanis|ianis|iains|ian)\b\s*", "", cleaned, flags=re.IGNORECASE)
   
     cleaned = re.sub(r"^(?:an|a)\s+people\b", "people", cleaned, flags=re.IGNORECASE)
    
@@ -100,6 +119,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_dir, local_files_only=True)
     image_processor = AutoImageProcessor.from_pretrained(model_source, local_files_only=True)
     model = VisionEncoderDecoderModel.from_pretrained(model_source, local_files_only=True)
+    bad_words_ids = build_bad_words_ids(tokenizer)
 
     
     if adapter_dir.exists():
@@ -135,6 +155,7 @@ def main():
             repetition_penalty=args.repetition_penalty,
             renormalize_logits=True,
             early_stopping=True,
+            bad_words_ids=bad_words_ids if bad_words_ids else None,
         )
 
     caption = tokenizer.decode(generated_ids[0], skip_special_tokens=True).strip()
